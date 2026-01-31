@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database for MLflow metadata
+  postgres:
+    image: postgres:15-alpine
+    container_name: mlflow-postgres
+    environment:
+      POSTGRES_DB: mlflow
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow123
+    volumes:
+      - ~/volumes/postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - mlflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MLflow server with AWS S3
+  mlflow:
+    image: python:3.12-slim
+    container_name: mlflow-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # PostgreSQL connection
+      DB_URI: postgresql://mlflow:mlflow123@postgres:5432/mlflow
+      # AWS credentials - REPLACE THESE WITH YOUR ACTUAL VALUES
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      # Optional: Use specific S3 endpoint (for non-standard regions or S3-compatible services)
+      # AWS_S3_ENDPOINT_URL: https://s3.us-west-2.amazonaws.com
+      # GenAI API keys (loaded from .env file)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # GenAI evaluation configuration
+      MLFLOW_GENAI_EVAL_MAX_WORKERS: ${MLFLOW_GENAI_EVAL_MAX_WORKERS:-10}
+      MLFLOW_GENAI_EVAL_ASYNC_TIMEOUT: ${MLFLOW_GENAI_EVAL_ASYNC_TIMEOUT:-300}
+    ports:
+      - "5000:5000"
+    networks:
+      - mlflow-network
+    command: >
+      /bin/sh -c "
+      pip install 'mlflow[genai]>=3.6.0' psycopg2-binary boto3 openai anthropic litellm langchain langchain-openai langchain-community &&
+      mlflow server
+      --backend-store-uri postgresql://mlflow:mlflow123@postgres:5432/mlflow
+      --default-artifact-root s3://${MLFLOW_S3_BUCKET}/mlflow-artifacts/
+      --host 0.0.0.0
+      --port 5000
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  mlflow-network:
+    driver: bridge
