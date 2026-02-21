@@ -10,7 +10,7 @@ authors = [
 
 dependencies = [
     # MLflow with GenAI support
-    "mlflow[genai]>=3.6.0",
+    "mlflow[genai]==3.10",
 
     # S3/MinIO support (for local testing)
     "boto3>=1.34.0",
@@ -53,6 +53,9 @@ dev = [
 all = [
     "mlflow-testing[aws,dev]",
 ]
+
+[project.scripts]
+mlflow-light = "mlflow_testing.cli:serve_light"
 
 [build-system]
 requires = ["hatchling"]

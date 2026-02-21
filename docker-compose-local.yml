@@ -4,9 +4,10 @@ services:
   # MLflow server with SQLite metadata + local volume artifact storage
   mlflow:
     image: python:3.12-slim
-    container_name: mlflow-server
+    container_name: mlflow-server-light
     environment:
       # GenAI API keys (loaded from .env file)
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-http://host.docker.internal:11434/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # GenAI evaluation configuration
