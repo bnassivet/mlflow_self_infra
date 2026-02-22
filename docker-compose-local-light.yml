@@ -19,7 +19,7 @@ services:
       - "${MLFLOW_PORT:-5010}:5000"
     command: >
       /bin/sh -c "
-      pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.6.0}' openai anthropic litellm langchain langchain-openai langchain-community &&
+      pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.10.0}' openai anthropic litellm langchain langchain-openai langchain-community dspy -U &&
       mlflow server
       --backend-store-uri sqlite:////mlflow/db/mlflow.db
       --default-artifact-root /mlflow/artifacts

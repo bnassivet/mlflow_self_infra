@@ -37,7 +37,7 @@ echo ""
 
 # Start services
 echo "🚀 Starting MLflow..."
-docker compose -f docker-compose-local.yml up -d
+docker compose -f docker-compose-local-light.yml up -d
 
 echo ""
 echo "⏳ Waiting for MLflow to be ready..."
@@ -48,7 +48,7 @@ echo ""
 max_attempts=60
 attempt=0
 while [ $attempt -lt $max_attempts ]; do
-    if docker compose -f docker-compose-local.yml logs mlflow 2>/dev/null | grep -q "Listening at"; then
+    if docker compose -f docker-compose-local-light.yml logs mlflow 2>/dev/null | grep -q "Listening at"; then
         echo "✅ MLflow is ready!"
         break
     fi
@@ -60,7 +60,7 @@ done
 if [ $attempt -eq $max_attempts ]; then
     echo ""
     echo "⚠️  MLflow is starting but may need more time"
-    echo "Check logs with: docker compose -f docker-compose-local.yml logs -f"
+    echo "Check logs with: docker compose -f docker-compose-local-light.yml logs -f"
 fi
 
 echo ""
@@ -79,8 +79,8 @@ echo "  pip install mlflow"
 echo "  MLFLOW_TRACKING_URI=http://localhost:${MLFLOW_PORT} python tests/test_mlflow.py"
 echo ""
 echo "📝 Useful commands:"
-echo "  docker compose -f docker-compose-local.yml logs -f   # View logs"
-echo "  docker compose -f docker-compose-local.yml down      # Stop services"
+echo "  docker compose -f docker-compose-local-light.yml logs -f   # View logs"
+echo "  docker compose -f docker-compose-local-light.yml down      # Stop services"
 echo "  rm -rf ~/volumes/mlflow-light                         # Delete all data"
-echo "  docker compose -f docker-compose-local.yml ps        # Check status"
+echo "  docker compose -f docker-compose-local-light.yml ps        # Check status"
 echo ""
