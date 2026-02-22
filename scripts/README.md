@@ -5,7 +5,7 @@ This directory contains tests for validating different MLflow Docker Compose set
 ## Test Files
 
 ### test_mlflow.py
-Tests the **local MinIO setup** (docker-compose.yml).
+Tests the **local MinIO setup** (`docker-compose.yml`).
 
 **What it tests:**
 - MLflow server connectivity
@@ -17,21 +17,21 @@ Tests the **local MinIO setup** (docker-compose.yml).
 
 **Prerequisites:**
 - Docker Compose services running: `docker-compose up -d`
-- MinIO configuration in `.env`:
-  ```bash
-  MLFLOW_TRACKING_URI=http://localhost:5000
-  MLFLOW_S3_ENDPOINT_URL=http://localhost:9000
-  AWS_ACCESS_KEY_ID=minio
-  AWS_SECRET_ACCESS_KEY=minio123
+- `.env` configured with MinIO credentials (defaults work out of the box):
+  ```env
+  MLFLOW_PORT=5010
+  MINIO_API_PORT=9000
+  MINIO_ROOT_USER=minio
+  MINIO_ROOT_PASSWORD=minio123
   ```
 
 **Run:**
 ```bash
-python tests/test_mlflow.py
+MLFLOW_TRACKING_URI=http://localhost:5010 python tests/test_mlflow.py
 ```
 
 ### test_mlflow_aws.py
-Tests the **AWS S3 setup** (docker-compose-aws.yml).
+Tests the **AWS S3 setup** (`docker-compose-aws.yml`).
 
 **What it tests:**
 - MLflow server connectivity
@@ -44,8 +44,8 @@ Tests the **AWS S3 setup** (docker-compose-aws.yml).
 **Prerequisites:**
 - Docker Compose services running: `docker-compose -f docker-compose-aws.yml up -d`
 - AWS credentials in `.env`:
-  ```bash
-  MLFLOW_TRACKING_URI=http://localhost:5000
+  ```env
+  MLFLOW_PORT=5010
   AWS_ACCESS_KEY_ID=your-access-key
   AWS_SECRET_ACCESS_KEY=your-secret-key
   AWS_DEFAULT_REGION=us-east-1
@@ -54,7 +54,7 @@ Tests the **AWS S3 setup** (docker-compose-aws.yml).
 
 **Run:**
 ```bash
-python tests/test_mlflow_aws.py
+MLFLOW_TRACKING_URI=http://localhost:5010 python tests/test_mlflow_aws.py
 ```
 
 ## Running Tests
@@ -63,10 +63,10 @@ python tests/test_mlflow_aws.py
 
 ```bash
 # Test local MinIO setup
-python tests/test_mlflow.py
+MLFLOW_TRACKING_URI=http://localhost:5010 python tests/test_mlflow.py
 
 # Test AWS S3 setup
-python tests/test_mlflow_aws.py
+MLFLOW_TRACKING_URI=http://localhost:5010 python tests/test_mlflow_aws.py
 ```
 
 ### Using pytest
@@ -89,7 +89,7 @@ pytest --cov=. --cov-report=term-missing
 
 Tests use `conftest.py` for shared fixtures and configuration:
 - `load_env`: Automatically loads `.env` file
-- `mlflow_tracking_uri`: MLflow server URI
+- `mlflow_tracking_uri`: MLflow server URI (reads `MLFLOW_PORT` from `.env`)
 - `minio_config`: MinIO configuration fixture
 - `aws_config`: AWS configuration fixture
 
@@ -113,20 +113,12 @@ def test_langchain_integration(mlflow_tracking_uri):
     # ... test implementation
 ```
 
-## Future Tests to Add
-
-Based on the GenAI implementation plan:
-
-- `test_genai.py`: Test GenAI features (prompts, evaluation)
-- `test_langchain.py`: Test LangChain integration
-- `test_evaluation.py`: Test MLflow evaluation metrics
-- `test_tracing.py`: Test LLM tracing features
-
 ## Troubleshooting
 
 **Tests fail with connection errors:**
 - Ensure Docker services are running
 - Wait 30-60 seconds after starting services
+- Check the port in `MLFLOW_PORT` matches what you're connecting to
 - Check logs: `docker-compose logs -f mlflow`
 
 **AWS tests fail:**

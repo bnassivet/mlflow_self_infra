@@ -52,6 +52,9 @@ fi
 echo "✅ .env configuration looks good"
 echo ""
 
+MLFLOW_PORT="${MLFLOW_PORT:-5000}"
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+
 # Check if AWS CLI is available and verify bucket exists
 if command -v aws &> /dev/null; then
     echo "🔍 Checking if S3 bucket exists..."
@@ -127,7 +130,7 @@ echo "✅ Setup Complete!"
 echo "=========================================="
 echo ""
 echo "📊 Access your services:"
-echo "  • MLflow UI:      http://localhost:5000"
+echo "  • MLflow UI:      http://localhost:${MLFLOW_PORT}"
 echo ""
 echo "☁️  AWS Configuration:"
 echo "  • S3 Bucket:      s3://$MLFLOW_S3_BUCKET/mlflow-artifacts/"

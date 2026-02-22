@@ -1,22 +1,20 @@
-version: '3.8'
-
 services:
   # PostgreSQL database for MLflow metadata
   postgres:
     image: postgres:15-alpine
     container_name: mlflow-postgres
     environment:
-      POSTGRES_DB: mlflow
-      POSTGRES_USER: mlflow
-      POSTGRES_PASSWORD: mlflow123
+      POSTGRES_DB: ${POSTGRES_DB:-mlflow}
+      POSTGRES_USER: ${POSTGRES_USER:-mlflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow123}
     volumes:
       - ~/volumes/postgres:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     networks:
       - mlflow-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mlflow"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mlflow}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,14 +24,14 @@ services:
     image: minio/minio:latest
     container_name: mlflow-minio
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
     command: server /data --console-address ":9001"
     volumes:
       - ~/volumes/minio:/data
     ports:
-      - "9000:9000"  # MinIO API
-      - "9001:9001"  # MinIO Console
+      - "${MINIO_API_PORT:-9000}:9000"     # MinIO API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # MinIO Console
     networks:
       - mlflow-network
     healthcheck:
@@ -54,9 +52,9 @@ services:
     entrypoint: >
       /bin/sh -c "
       sleep 5;
-      /usr/bin/mc alias set myminio http://minio:9000 minio minio123;
-      /usr/bin/mc mb myminio/mlflow --ignore-existing;
-      /usr/bin/mc anonymous set download myminio/mlflow;
+      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minio} ${MINIO_ROOT_PASSWORD:-minio123};
+      /usr/bin/mc mb myminio/${MINIO_BUCKET:-mlflow} --ignore-existing;
+      /usr/bin/mc anonymous set download myminio/${MINIO_BUCKET:-mlflow};
       exit 0;
       "
 
@@ -73,11 +71,11 @@ services:
         condition: service_completed_successfully
     environment:
       # PostgreSQL connection
-      DB_URI: postgresql://mlflow:mlflow123@postgres:5432/mlflow
+      DB_URI: postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow123}@postgres:5432/${POSTGRES_DB:-mlflow}
       # MinIO connection
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      AWS_ACCESS_KEY_ID: minio
-      AWS_SECRET_ACCESS_KEY: minio123
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
       # GenAI API keys (loaded from .env file)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -85,16 +83,16 @@ services:
       MLFLOW_GENAI_EVAL_MAX_WORKERS: ${MLFLOW_GENAI_EVAL_MAX_WORKERS:-10}
       MLFLOW_GENAI_EVAL_ASYNC_TIMEOUT: ${MLFLOW_GENAI_EVAL_ASYNC_TIMEOUT:-300}
     ports:
-      - "5010:5000"
+      - "${MLFLOW_PORT:-5010}:5000"
     networks:
       - mlflow-network
     command: >
       /bin/sh -c "
-      pip install 'mlflow[genai]>=3.6.0' psycopg2-binary boto3 openai anthropic litellm langchain langchain-openai langchain-community &&
+      pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.10.0}' psycopg2-binary boto3 openai anthropic litellm langchain langchain-openai langchain-community dspy -U &&
       mlflow server
-      --backend-store-uri postgresql://mlflow:mlflow123@postgres:5432/mlflow
-      --default-artifact-root s3://mlflow/
-      --host 0.0.0.0
+      --backend-store-uri postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow123}@postgres:5432/${POSTGRES_DB:-mlflow}
+      --default-artifact-root s3://${MINIO_BUCKET:-mlflow}/
+      --host ${MLFLOW_HOST:-0.0.0.0}
       --port 5000
       "
     healthcheck:
