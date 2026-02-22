@@ -5,6 +5,17 @@
 
 set -e
 
+# Load port configuration from .env if present
+if [ -f .env ]; then
+    set -o allexport
+    source .env
+    set +o allexport
+fi
+MLFLOW_PORT="${MLFLOW_PORT:-5010}"
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+MINIO_API_PORT="${MINIO_API_PORT:-9000}"
+MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
+
 echo "=========================================="
 echo "MLflow Docker Setup"
 echo "=========================================="
@@ -62,8 +73,8 @@ echo "✅ Setup Complete!"
 echo "=========================================="
 echo ""
 echo "📊 Access your services:"
-echo "  • MLflow UI:      http://localhost:5000"
-echo "  • MinIO Console:  http://localhost:9001"
+echo "  • MLflow UI:      http://localhost:${MLFLOW_PORT}"
+echo "  • MinIO Console:  http://localhost:${MINIO_CONSOLE_PORT}"
 echo "                    (user: minio, password: minio123)"
 echo ""
 echo "💾 Data is stored in:"

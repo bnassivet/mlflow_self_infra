@@ -6,17 +6,17 @@ services:
     image: postgres:15-alpine
     container_name: mlflow-postgres
     environment:
-      POSTGRES_DB: mlflow
-      POSTGRES_USER: mlflow
-      POSTGRES_PASSWORD: mlflow123
+      POSTGRES_DB: ${POSTGRES_DB:-mlflow}
+      POSTGRES_USER: ${POSTGRES_USER:-mlflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow123}
     volumes:
       - ~/volumes/postgres:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     networks:
       - mlflow-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mlflow"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mlflow}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,7 +30,7 @@ services:
         condition: service_healthy
     environment:
       # PostgreSQL connection
-      DB_URI: postgresql://mlflow:mlflow123@postgres:5432/mlflow
+      DB_URI: postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow123}@postgres:5432/${POSTGRES_DB:-mlflow}
       # AWS credentials - REPLACE THESE WITH YOUR ACTUAL VALUES
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -44,16 +44,16 @@ services:
       MLFLOW_GENAI_EVAL_MAX_WORKERS: ${MLFLOW_GENAI_EVAL_MAX_WORKERS:-10}
       MLFLOW_GENAI_EVAL_ASYNC_TIMEOUT: ${MLFLOW_GENAI_EVAL_ASYNC_TIMEOUT:-300}
     ports:
-      - "5000:5000"
+      - "${MLFLOW_PORT:-5010}:5000"
     networks:
       - mlflow-network
     command: >
       /bin/sh -c "
-      pip install 'mlflow[genai]>=3.6.0' psycopg2-binary boto3 openai anthropic litellm langchain langchain-openai langchain-community &&
+      pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.6.0}' psycopg2-binary boto3 openai anthropic litellm langchain langchain-openai langchain-community &&
       mlflow server
-      --backend-store-uri postgresql://mlflow:mlflow123@postgres:5432/mlflow
+      --backend-store-uri postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow123}@postgres:5432/${POSTGRES_DB:-mlflow}
       --default-artifact-root s3://${MLFLOW_S3_BUCKET}/mlflow-artifacts/
-      --host 0.0.0.0
+      --host ${MLFLOW_HOST:-0.0.0.0}
       --port 5000
       "
     healthcheck:

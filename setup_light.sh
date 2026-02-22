@@ -5,6 +5,14 @@
 
 set -e
 
+# Load port configuration from .env if present
+if [ -f .env ]; then
+    set -o allexport
+    source .env
+    set +o allexport
+fi
+MLFLOW_PORT="${MLFLOW_PORT:-5010}"
+
 echo "=========================================="
 echo "MLflow Light Setup (SQLite + local volume)"
 echo "=========================================="
@@ -60,7 +68,7 @@ echo "=========================================="
 echo "✅ Setup Complete!"
 echo "=========================================="
 echo ""
-echo "📊 Access MLflow UI: http://localhost:5010"
+echo "📊 Access MLflow UI: http://localhost:${MLFLOW_PORT}"
 echo ""
 echo "💾 Data is stored in: ~/volumes/mlflow-light"
 echo "   ~/volumes/mlflow-light/db          # SQLite database"
@@ -68,7 +76,7 @@ echo "   ~/volumes/mlflow-light/artifacts   # MLflow artifacts"
 echo ""
 echo "🧪 Test your setup:"
 echo "  pip install mlflow"
-echo "  MLFLOW_TRACKING_URI=http://localhost:5010 python tests/test_mlflow.py"
+echo "  MLFLOW_TRACKING_URI=http://localhost:${MLFLOW_PORT} python tests/test_mlflow.py"
 echo ""
 echo "📝 Useful commands:"
 echo "  docker compose -f docker-compose-local.yml logs -f   # View logs"

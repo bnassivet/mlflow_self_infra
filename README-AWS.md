@@ -19,13 +19,6 @@ This Docker Compose setup provides MLflow tracking server with:
 ```bash
 # Using AWS CLI
 aws s3 mb s3://your-mlflow-bucket-name --region us-east-1
-
-# Or create via AWS Console:
-# - Go to S3 in AWS Console
-# - Click "Create bucket"
-# - Name it (e.g., "my-mlflow-artifacts")
-# - Choose your preferred region
-# - Keep default settings or adjust as needed
 ```
 
 ### 2. Create IAM User (Recommended)
@@ -61,34 +54,42 @@ Create a dedicated IAM user for MLflow with S3 access:
 
 ### 3. Configure Environment Variables
 
-Create a `.env` file in the same directory as `docker-compose-aws.yml`:
-
 ```bash
-# Copy the example file
 cp .env.example .env
-
-# Edit with your values
 nano .env
 ```
 
-Your `.env` file should look like:
+Your `.env` file should include at minimum:
 ```env
+# AWS credentials
 AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 AWS_DEFAULT_REGION=us-east-1
 MLFLOW_S3_BUCKET=my-mlflow-bucket-name
+
+# Ports (optional — change to avoid conflicts)
+MLFLOW_PORT=5010
+POSTGRES_PORT=5432
+
+# PostgreSQL credentials (optional — defaults shown)
+POSTGRES_USER=mlflow
+POSTGRES_PASSWORD=mlflow123
+POSTGRES_DB=mlflow
+
+# MLflow version (optional)
+MLFLOW_VERSION=mlflow[genai]>=3.10.0
 ```
 
-**⚠️ Security Note:** Never commit `.env` file to version control!
+**⚠️ Security Note:** Never commit `.env` to version control!
 
 ## Quick Start
 
-1. **Create the PostgreSQL volume directory:**
+1. **Configure your `.env` file** (see above)
+
+2. **Create the PostgreSQL volume directory:**
    ```bash
    mkdir -p ~/volumes/postgres
    ```
-
-2. **Configure your `.env` file** (see above)
 
 3. **Start the services:**
    ```bash
@@ -102,45 +103,53 @@ MLFLOW_S3_BUCKET=my-mlflow-bucket-name
    Wait until you see "Listening at: http://0.0.0.0:5000"
 
 5. **Access MLflow UI:**
-   - MLflow UI: http://localhost:5000
+   - MLflow UI: http://localhost:5010 (or your `MLFLOW_PORT`)
+
+## Configuration
+
+All configurable values live in `.env`. See `.env.example` for the full list.
+
+### Ports
+
+| Variable | Default | Description |
+|---|---|---|
+| `MLFLOW_PORT` | `5010` | Host port for the MLflow UI |
+| `POSTGRES_PORT` | `5432` | Host port for PostgreSQL |
+
+### MLflow Version
+
+```env
+MLFLOW_VERSION=mlflow[genai]>=3.10.0   # default
+MLFLOW_VERSION=mlflow[genai]==3.10.0   # pin exact version
+```
+
+### Changing PostgreSQL Credentials
+
+Update `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` in `.env`. The compose file reads these automatically — no manual edits to `docker-compose-aws.yml` needed.
 
 ## Using MLflow from Your Python Code
 
-Install the MLflow client:
 ```bash
 pip install mlflow boto3
 ```
 
-Set environment variables:
 ```bash
-export MLFLOW_TRACKING_URI=http://localhost:5000
+export MLFLOW_TRACKING_URI=http://localhost:5010   # match your MLFLOW_PORT
 export AWS_ACCESS_KEY_ID=your_access_key
 export AWS_SECRET_ACCESS_KEY=your_secret_key
 export AWS_DEFAULT_REGION=us-east-1
 ```
 
-Example Python code:
 ```python
 import mlflow
-import os
 
-# Set MLflow tracking URI
-mlflow.set_tracking_uri("http://localhost:5000")
-
-# Set AWS credentials (same as in .env file)
-os.environ['AWS_ACCESS_KEY_ID'] = 'your_access_key'
-os.environ['AWS_SECRET_ACCESS_KEY'] = 'your_secret_key'
-os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
-
-# Start an experiment
+mlflow.set_tracking_uri("http://localhost:5010")
 mlflow.set_experiment("my-experiment")
 
-# Log parameters, metrics, and artifacts
 with mlflow.start_run():
     mlflow.log_param("param1", 5)
     mlflow.log_metric("metric1", 0.85)
-    
-    # Log a file as an artifact (will be stored in S3)
+
     with open("example.txt", "w") as f:
         f.write("Hello MLflow with S3!")
     mlflow.log_artifact("example.txt")
@@ -148,79 +157,48 @@ with mlflow.start_run():
 
 ## Useful Commands
 
-**Stop all services:**
 ```bash
+# Stop services
 docker-compose -f docker-compose-aws.yml down
-```
 
-**View logs:**
-```bash
-# All services
+# View logs
 docker-compose -f docker-compose-aws.yml logs -f
-
-# Specific service
 docker-compose -f docker-compose-aws.yml logs -f mlflow
-docker-compose -f docker-compose-aws.yml logs -f postgres
-```
 
-**Restart MLflow server:**
-```bash
+# Restart MLflow
 docker-compose -f docker-compose-aws.yml restart mlflow
-```
 
-**Check service status:**
-```bash
+# Check status
 docker-compose -f docker-compose-aws.yml ps
 ```
 
-## Configuration
+**Update MLflow to a new version:**
 
-### PostgreSQL
-- Host: localhost:5432
-- Database: mlflow
-- User: mlflow
-- Password: mlflow123
-
-### AWS S3
-- Configured via `.env` file
-- Artifacts stored at: `s3://your-bucket-name/mlflow-artifacts/`
-
-### Changing PostgreSQL Credentials
-
-Edit the `docker-compose-aws.yml` file:
-```yaml
-environment:
-  POSTGRES_USER: your_user
-  POSTGRES_PASSWORD: your_password
-  POSTGRES_DB: your_db
+Edit `MLFLOW_VERSION` in `.env`, then force-recreate only the MLflow container (postgres is left untouched):
+```bash
+docker-compose -f docker-compose-aws.yml up -d --force-recreate mlflow
 ```
-
-Also update the `DB_URI` in the MLflow service accordingly.
+This triggers a fresh `pip install` on startup with the new version.
 
 ## Data Persistence
 
-- **PostgreSQL data**: Stored in `~/volumes/postgres` on your Mac
-- **MLflow artifacts**: Stored in your AWS S3 bucket
+- **PostgreSQL data**: `~/volumes/postgres` on your Mac
+- **MLflow artifacts**: Your AWS S3 bucket
 
-To backup PostgreSQL data:
+Backup PostgreSQL data:
 ```bash
 docker-compose -f docker-compose-aws.yml down
 tar czf postgres-backup.tar.gz -C ~ volumes/postgres
 ```
 
-S3 artifacts are automatically backed up by AWS (consider enabling versioning).
+S3 artifacts are managed by AWS (consider enabling bucket versioning).
 
 ## Cost Considerations
 
-**AWS S3 Costs:**
+**AWS S3 Costs (approximate):**
 - Storage: ~$0.023 per GB/month (Standard tier)
 - PUT requests: ~$0.005 per 1,000 requests
 - GET requests: ~$0.0004 per 1,000 requests
-- Data transfer: Free for downloads within same region
-
-**Estimated costs for typical usage:**
-- Small team (10 experiments/day, 100MB artifacts): ~$1-5/month
-- Medium usage (100 experiments/day, 1GB artifacts): ~$10-20/month
 
 **Cost optimization tips:**
 - Enable S3 lifecycle policies to archive old artifacts to Glacier
@@ -233,107 +211,37 @@ S3 artifacts are automatically backed up by AWS (consider enabling versioning).
 2. **Enable S3 bucket versioning** for artifact history
 3. **Enable S3 encryption at rest**
 4. **Use separate buckets for different environments** (dev/staging/prod)
-5. **Set up S3 bucket policies** to restrict access
-6. **Never commit `.env` file** to version control
-7. **Rotate AWS credentials regularly**
-8. **Enable CloudTrail** for audit logging
+5. **Never commit `.env` file** to version control
+6. **Rotate AWS credentials regularly**
 
 ## Troubleshooting
 
 **MLflow can't connect to S3:**
-- Verify AWS credentials in `.env` file
+- Verify AWS credentials in `.env`
 - Check IAM permissions for the user
-- Verify S3 bucket exists and region is correct
-- Check CloudWatch logs in AWS Console
+- Verify S3 bucket exists and region matches `AWS_DEFAULT_REGION`
 
 **"Access Denied" errors:**
 - Review IAM policy permissions
 - Ensure bucket policy allows your IAM user
-- Check if bucket is in the correct region
-
-**Slow artifact uploads:**
-- Consider using S3 Transfer Acceleration
-- Check your internet connection
-- Ensure you're using the correct regional endpoint
 
 **PostgreSQL connection issues:**
 - Wait a few seconds after starting services
 - Check logs: `docker-compose -f docker-compose-aws.yml logs postgres`
-- Verify PostgreSQL is healthy: `docker-compose -f docker-compose-aws.yml ps`
 
 ## Using AWS Profiles
-
-If you have multiple AWS profiles configured, you can specify which one to use:
 
 ```yaml
 # In docker-compose-aws.yml, add to mlflow service:
 environment:
   AWS_PROFILE: your-profile-name
 volumes:
-  - ~/.aws:/root/.aws:ro  # Mount AWS credentials
+  - ~/.aws:/root/.aws:ro
 ```
-
-## Advanced: S3 Lifecycle Policies
-
-Archive old artifacts to reduce costs:
-
-```json
-{
-  "Rules": [
-    {
-      "Id": "ArchiveOldMLflowArtifacts",
-      "Status": "Enabled",
-      "Transitions": [
-        {
-          "Days": 90,
-          "StorageClass": "GLACIER"
-        }
-      ],
-      "NoncurrentVersionTransitions": [
-        {
-          "NoncurrentDays": 30,
-          "StorageClass": "GLACIER"
-        }
-      ]
-    }
-  ]
-}
-```
-
-Apply via AWS CLI:
-```bash
-aws s3api put-bucket-lifecycle-configuration \
-  --bucket your-mlflow-bucket-name \
-  --lifecycle-configuration file://lifecycle.json
-```
-
-## Monitoring
-
-**View artifacts in S3:**
-```bash
-# List artifacts
-aws s3 ls s3://your-mlflow-bucket-name/mlflow-artifacts/ --recursive
-
-# Check bucket size
-aws s3 ls s3://your-mlflow-bucket-name --recursive --summarize
-```
-
-**Monitor costs:**
-- Enable AWS Cost Explorer
-- Set up billing alerts
-- Use AWS Budgets to track spending
 
 ## Migration from MinIO
 
-If you're migrating from the MinIO setup:
-
-1. Export experiments from MinIO-based MLflow
-2. Set up AWS S3 version
-3. Use `aws s3 sync` to copy artifacts from MinIO to S3
-4. Update your tracking server URI in client code
-
 ```bash
-# Example: Copy MinIO data to S3
-# (requires mc CLI configured for MinIO)
+# Copy MinIO artifacts to S3 (requires mc CLI configured for MinIO)
 mc mirror myminio/mlflow s3://your-aws-bucket/mlflow-artifacts/
 ```

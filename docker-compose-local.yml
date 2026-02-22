@@ -16,10 +16,10 @@ services:
     volumes:
       - ~/volumes/mlflow-light:/mlflow
     ports:
-      - "5010:5000"
+      - "${MLFLOW_PORT:-5010}:5000"
     command: >
       /bin/sh -c "
-      pip install 'mlflow[genai]>=3.6.0' openai anthropic litellm langchain langchain-openai langchain-community &&
+      pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.6.0}' openai anthropic litellm langchain langchain-openai langchain-community &&
       mlflow server
       --backend-store-uri sqlite:////mlflow/db/mlflow.db
       --default-artifact-root /mlflow/artifacts
