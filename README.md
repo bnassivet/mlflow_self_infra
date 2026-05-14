@@ -18,9 +18,9 @@ This Docker Compose setup provides a complete MLflow tracking server with:
    # Edit .env to customize ports, credentials, or MLflow version
    ```
 
-2. **Create the volumes directory:**
+2. **Create the volumes directories:**
    ```bash
-   mkdir -p ~/volumes/postgres ~/volumes/minio
+   mkdir -p ~/volumes/postgres ~/volumes/minio ~/volumes/postgres-backups
    ```
 
 3. **Start the services:**
@@ -62,6 +62,14 @@ All configurable values live in `.env`. Copy `.env.example` as a starting point.
 | `MINIO_ROOT_USER` | `minio` | MinIO root username |
 | `MINIO_ROOT_PASSWORD` | `minio123` | MinIO root password |
 | `MINIO_BUCKET` | `mlflow` | MinIO bucket for artifacts |
+
+### GenAI / LLM Endpoint
+
+| Variable | Default | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | _(empty)_ | OpenAI API key for GenAI evaluation |
+| `ANTHROPIC_API_KEY` | _(empty)_ | Anthropic API key for GenAI evaluation |
+| `OPENAI_API_BASE` | `http://host.docker.internal:1234/v1` | OpenAI-compatible API endpoint — override to point at a local LLM (e.g. LM Studio, vLLM) |
 
 ### MLflow Version
 
@@ -160,6 +168,18 @@ docker-compose up -d --force-recreate mlflow
 ```
 This triggers a fresh `pip install` on startup with the new version.
 
+**Run a schema migration (before upgrading MLflow):**
+
+The `mlflow-migrate` service is opt-in and will:
+1. Create a timestamped pg_dump backup in `~/volumes/postgres-backups/`
+2. Run `mlflow db upgrade` to apply any pending schema changes
+
+```bash
+docker-compose --profile migrate up mlflow-migrate
+```
+
+This service exits automatically when done. Check the output for the backup file path. The stack (postgres, minio, mlflow) does not need to be stopped beforehand.
+
 **Check service status:**
 ```bash
 docker-compose ps
@@ -170,6 +190,7 @@ docker-compose ps
 All data is stored in the `~/volumes` directory on your Mac:
 - `~/volumes/postgres`: PostgreSQL database files
 - `~/volumes/minio`: MinIO object storage files
+- `~/volumes/postgres-backups`: Pre-migration pg_dump backups (created by `mlflow-migrate`)
 
 This data persists even when containers are stopped. To completely remove data:
 ```bash

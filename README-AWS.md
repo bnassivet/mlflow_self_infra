@@ -78,6 +78,9 @@ POSTGRES_DB=mlflow
 
 # MLflow version (optional)
 MLFLOW_VERSION=mlflow[genai]>=3.10.0
+
+# GenAI / LLM endpoint (optional — override to point at a local LLM)
+# OPENAI_API_BASE=http://host.docker.internal:1234/v1
 ```
 
 **⚠️ Security Note:** Never commit `.env` to version control!
@@ -86,9 +89,9 @@ MLFLOW_VERSION=mlflow[genai]>=3.10.0
 
 1. **Configure your `.env` file** (see above)
 
-2. **Create the PostgreSQL volume directory:**
+2. **Create the volume directories:**
    ```bash
-   mkdir -p ~/volumes/postgres
+   mkdir -p ~/volumes/postgres ~/volumes/postgres-backups
    ```
 
 3. **Start the services:**
@@ -122,6 +125,10 @@ All configurable values live in `.env`. See `.env.example` for the full list.
 MLFLOW_VERSION=mlflow[genai]>=3.10.0   # default
 MLFLOW_VERSION=mlflow[genai]==3.10.0   # pin exact version
 ```
+
+### GenAI / LLM Endpoint
+
+`OPENAI_API_BASE` controls which OpenAI-compatible endpoint MLflow uses for GenAI evaluation. It defaults to `http://host.docker.internal:1234/v1` (LM Studio). Override in `.env` to point at any OpenAI-compatible server (vLLM, Ollama, etc.) or leave unset to use the public OpenAI API.
 
 ### Changing PostgreSQL Credentials
 
@@ -180,12 +187,25 @@ docker-compose -f docker-compose-aws.yml up -d --force-recreate mlflow
 ```
 This triggers a fresh `pip install` on startup with the new version.
 
+**Run a schema migration (before upgrading MLflow):**
+
+The `mlflow-migrate` service is opt-in and will:
+1. Create a timestamped pg_dump backup in `~/volumes/postgres-backups/`
+2. Run `mlflow db upgrade` to apply any pending schema changes
+
+```bash
+docker-compose -f docker-compose-aws.yml --profile migrate up mlflow-migrate
+```
+
+This service exits automatically when done. Check the output for the backup file path.
+
 ## Data Persistence
 
 - **PostgreSQL data**: `~/volumes/postgres` on your Mac
 - **MLflow artifacts**: Your AWS S3 bucket
+- **Pre-migration backups**: `~/volumes/postgres-backups` (pg_dump files created by `mlflow-migrate`)
 
-Backup PostgreSQL data:
+Backup PostgreSQL data manually:
 ```bash
 docker-compose -f docker-compose-aws.yml down
 tar czf postgres-backup.tar.gz -C ~ volumes/postgres
