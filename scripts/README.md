@@ -5,24 +5,24 @@ This directory contains tests for validating different MLflow Docker Compose set
 ## Test Files
 
 ### test_mlflow.py
-Tests the **local MinIO setup** (`docker-compose.yml`).
+Tests the **local RustFS setup** (`docker-compose.yml`).
 
 **What it tests:**
 - MLflow server connectivity
 - PostgreSQL backend storage
-- MinIO artifact storage
+- RustFS artifact storage
 - Model training and logging
 - Artifact upload/download
 - Model serialization and loading
 
 **Prerequisites:**
 - Docker Compose services running: `docker-compose up -d`
-- `.env` configured with MinIO credentials (defaults work out of the box):
+- `.env` configured with RustFS credentials (defaults work out of the box):
   ```env
   MLFLOW_PORT=5010
-  MINIO_API_PORT=9000
-  MINIO_ROOT_USER=minio
-  MINIO_ROOT_PASSWORD=minio123
+  RUSTFS_API_PORT=9000
+  RUSTFS_ROOT_USER=rustfs
+  RUSTFS_ROOT_PASSWORD=rustfs123
   ```
 
 **Run:**
@@ -62,7 +62,7 @@ MLFLOW_TRACKING_URI=http://localhost:5010 python tests/test_mlflow_aws.py
 ### Using Python directly
 
 ```bash
-# Test local MinIO setup
+# Test local RustFS setup
 MLFLOW_TRACKING_URI=http://localhost:5010 python tests/test_mlflow.py
 
 # Test AWS S3 setup
@@ -90,7 +90,7 @@ pytest --cov=. --cov-report=term-missing
 Tests use `conftest.py` for shared fixtures and configuration:
 - `load_env`: Automatically loads `.env` file
 - `mlflow_tracking_uri`: MLflow server URI (reads `MLFLOW_PORT` from `.env`)
-- `minio_config`: MinIO configuration fixture
+- `rustfs_config`: RustFS (S3) configuration fixture
 - `aws_config`: AWS configuration fixture
 
 ## Creating New Tests

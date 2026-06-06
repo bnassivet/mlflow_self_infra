@@ -1,8 +1,8 @@
-# MLflow with PostgreSQL and MinIO - Docker Setup
+# MLflow with PostgreSQL and RustFS - Docker Setup
 
 This Docker Compose setup provides a complete MLflow tracking server with:
 - **PostgreSQL** for metadata and experiment tracking
-- **MinIO** for artifact storage (S3-compatible)
+- **RustFS** for artifact storage (S3-compatible)
 - **MLflow Server** for experiment tracking and model registry
 
 ## Prerequisites
@@ -20,7 +20,8 @@ This Docker Compose setup provides a complete MLflow tracking server with:
 
 2. **Create the volumes directories:**
    ```bash
-   mkdir -p ~/volumes/postgres ~/volumes/minio ~/volumes/postgres-backups
+   mkdir -p ~/volumes/postgres ~/volumes/rustfs ~/volumes/postgres-backups
+   # RustFS runs as UID 10001; on a native Linux host: sudo chown -R 10001:10001 ~/volumes/rustfs
    ```
 
 3. **Start the services:**
@@ -36,7 +37,7 @@ This Docker Compose setup provides a complete MLflow tracking server with:
 
 5. **Access the services** (using default `.env` values):
    - MLflow UI: http://localhost:5010
-   - MinIO Console: http://localhost:9001 (user: `minio`, password: `minio123`)
+   - RustFS Console: http://localhost:9001 (user: `rustfs`, password: `rustfs123`)
    - PostgreSQL: localhost:5432 (user: `mlflow`, password: `mlflow123`, db: `mlflow`)
 
 ## Configuration
@@ -49,8 +50,8 @@ All configurable values live in `.env`. Copy `.env.example` as a starting point.
 |---|---|---|
 | `MLFLOW_PORT` | `5010` | Host port for the MLflow UI |
 | `POSTGRES_PORT` | `5432` | Host port for PostgreSQL |
-| `MINIO_API_PORT` | `9000` | Host port for the MinIO S3 API |
-| `MINIO_CONSOLE_PORT` | `9001` | Host port for the MinIO web console |
+| `RUSTFS_API_PORT` | `9000` | Host port for the RustFS S3 API |
+| `RUSTFS_CONSOLE_PORT` | `9001` | Host port for the RustFS web console |
 
 ### Credentials
 
@@ -59,9 +60,9 @@ All configurable values live in `.env`. Copy `.env.example` as a starting point.
 | `POSTGRES_USER` | `mlflow` | PostgreSQL username |
 | `POSTGRES_PASSWORD` | `mlflow123` | PostgreSQL password |
 | `POSTGRES_DB` | `mlflow` | PostgreSQL database name |
-| `MINIO_ROOT_USER` | `minio` | MinIO root username |
-| `MINIO_ROOT_PASSWORD` | `minio123` | MinIO root password |
-| `MINIO_BUCKET` | `mlflow` | MinIO bucket for artifacts |
+| `RUSTFS_ROOT_USER` | `rustfs` | RustFS root username |
+| `RUSTFS_ROOT_PASSWORD` | `rustfs123` | RustFS root password |
+| `RUSTFS_BUCKET` | `mlflow` | RustFS bucket for artifacts |
 
 ### GenAI / LLM Endpoint
 
@@ -89,7 +90,7 @@ If any default ports clash with other services on your machine, change them in `
 
 ```env
 MLFLOW_PORT=5020
-MINIO_CONSOLE_PORT=9091
+RUSTFS_CONSOLE_PORT=9091
 ```
 
 No changes to `docker-compose.yml` are needed.
@@ -105,8 +106,8 @@ Set environment variables (adjust port if you changed `MLFLOW_PORT`):
 ```bash
 export MLFLOW_TRACKING_URI=http://localhost:5010
 export MLFLOW_S3_ENDPOINT_URL=http://localhost:9000
-export AWS_ACCESS_KEY_ID=minio
-export AWS_SECRET_ACCESS_KEY=minio123
+export AWS_ACCESS_KEY_ID=rustfs
+export AWS_SECRET_ACCESS_KEY=rustfs123
 ```
 
 Example Python code:
@@ -117,8 +118,8 @@ import os
 mlflow.set_tracking_uri("http://localhost:5010")
 
 os.environ['MLFLOW_S3_ENDPOINT_URL'] = 'http://localhost:9000'
-os.environ['AWS_ACCESS_KEY_ID'] = 'minio'
-os.environ['AWS_SECRET_ACCESS_KEY'] = 'minio123'
+os.environ['AWS_ACCESS_KEY_ID'] = 'rustfs'
+os.environ['AWS_SECRET_ACCESS_KEY'] = 'rustfs123'
 
 mlflow.set_experiment("my-experiment")
 
@@ -141,7 +142,7 @@ docker-compose down
 **Stop and remove all data:**
 ```bash
 docker-compose down
-rm -rf ~/volumes/postgres ~/volumes/minio
+rm -rf ~/volumes/postgres ~/volumes/rustfs
 ```
 
 **View logs:**
@@ -152,7 +153,7 @@ docker-compose logs -f
 # Specific service
 docker-compose logs -f mlflow
 docker-compose logs -f postgres
-docker-compose logs -f minio
+docker-compose logs -f rustfs
 ```
 
 **Restart a specific service:**
@@ -162,7 +163,7 @@ docker-compose restart mlflow
 
 **Update MLflow to a new version:**
 
-Edit `MLFLOW_VERSION` in `.env`, then force-recreate only the MLflow container (postgres and minio are left untouched):
+Edit `MLFLOW_VERSION` in `.env`, then force-recreate only the MLflow container (postgres and rustfs are left untouched):
 ```bash
 docker-compose up -d --force-recreate mlflow
 ```
@@ -178,7 +179,7 @@ The `mlflow-migrate` service is opt-in and will:
 docker-compose --profile migrate up mlflow-migrate
 ```
 
-This service exits automatically when done. Check the output for the backup file path. The stack (postgres, minio, mlflow) does not need to be stopped beforehand.
+This service exits automatically when done. Check the output for the backup file path. The stack (postgres, rustfs, mlflow) does not need to be stopped beforehand.
 
 **Check service status:**
 ```bash
@@ -189,20 +190,20 @@ docker-compose ps
 
 All data is stored in the `~/volumes` directory on your Mac:
 - `~/volumes/postgres`: PostgreSQL database files
-- `~/volumes/minio`: MinIO object storage files
+- `~/volumes/rustfs`: RustFS object storage files
 - `~/volumes/postgres-backups`: Pre-migration pg_dump backups (created by `mlflow-migrate`)
 
 This data persists even when containers are stopped. To completely remove data:
 ```bash
 docker-compose down
-rm -rf ~/volumes/postgres ~/volumes/minio
-mkdir -p ~/volumes/postgres ~/volumes/minio
+rm -rf ~/volumes/postgres ~/volumes/rustfs
+mkdir -p ~/volumes/postgres ~/volumes/rustfs
 ```
 
-## Accessing MinIO Console
+## Accessing RustFS Console
 
-1. Open http://localhost:9001 (or your `MINIO_CONSOLE_PORT`)
-2. Login with your `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from `.env`
+1. Open http://localhost:9001 (or your `RUSTFS_CONSOLE_PORT`)
+2. Login with your `RUSTFS_ROOT_USER` / `RUSTFS_ROOT_PASSWORD` from `.env`
 3. Navigate to "Buckets" to see the `mlflow` bucket and stored artifacts
 
 ## Health Checks
@@ -221,9 +222,9 @@ All services should show "healthy" status after startup.
 - Verify PostgreSQL is healthy: `docker-compose ps`
 
 **Artifacts not uploading:**
-- Verify MinIO is running: `docker-compose ps minio`
-- Check MinIO console at http://localhost:9001
-- Ensure bucket exists (created automatically by `minio-setup`)
+- Verify RustFS is running: `docker-compose ps rustfs`
+- Check RustFS console at http://localhost:9001
+- Ensure bucket exists (created automatically by `rustfs-setup`)
 
 ## Backup and Restore
 
@@ -237,7 +238,7 @@ docker-compose up -d
 **Restore:**
 ```bash
 docker-compose down
-rm -rf ~/volumes/postgres ~/volumes/minio
+rm -rf ~/volumes/postgres ~/volumes/rustfs
 tar xzf mlflow-backup-YYYYMMDD.tar.gz -C ~
 docker-compose up -d
 ```

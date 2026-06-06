@@ -259,9 +259,9 @@ volumes:
   - ~/.aws:/root/.aws:ro
 ```
 
-## Migration from MinIO
+## Migration from local RustFS
 
 ```bash
-# Copy MinIO artifacts to S3 (requires mc CLI configured for MinIO)
-mc mirror myminio/mlflow s3://your-aws-bucket/mlflow-artifacts/
+# Copy RustFS artifacts to S3 (requires mc CLI aliased to the local RustFS endpoint)
+mc mirror rustfs/mlflow s3://your-aws-bucket/mlflow-artifacts/
 ```

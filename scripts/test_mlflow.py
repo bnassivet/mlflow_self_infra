@@ -1,5 +1,5 @@
 """
-Example script to test MLflow setup with PostgreSQL and MinIO
+Example script to test MLflow setup with PostgreSQL and RustFS
 Run this after starting the Docker Compose services
 """
 
@@ -14,10 +14,10 @@ import numpy as np
 # Configure MLflow
 mlflow.set_tracking_uri("http://localhost:5010")
 
-# Configure MinIO for artifact storage
+# Configure RustFS (S3) for artifact storage
 os.environ['MLFLOW_S3_ENDPOINT_URL'] = 'http://localhost:9000'
-os.environ['AWS_ACCESS_KEY_ID'] = 'minio'
-os.environ['AWS_SECRET_ACCESS_KEY'] = 'minio123'
+os.environ['AWS_ACCESS_KEY_ID'] = 'rustfs'
+os.environ['AWS_SECRET_ACCESS_KEY'] = 'rustfs123'
 
 def train_model():
     """Train a simple model and log to MLflow"""
@@ -120,7 +120,7 @@ if __name__ == "__main__":
         print("\n" + "=" * 60)
         print("✅ Demo completed successfully!")
         print("Check the MLflow UI at http://localhost:5010")
-        print("Check MinIO console at http://localhost:9001")
+        print("Check RustFS console at http://localhost:9001")
         print("=" * 60)
         
     except Exception as e:
