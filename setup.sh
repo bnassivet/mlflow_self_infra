@@ -24,7 +24,14 @@ echo ""
 # Create volumes directory structure
 echo "📁 Creating volumes directory structure..."
 mkdir -p ~/volumes/postgres
-mkdir -p ~/volumes/minio
+mkdir -p ~/volumes/rustfs
+# RustFS runs as non-root UID 10001. On a Linux host the data dir must be owned
+# by that UID; on macOS Docker Desktop handles bind-mount ownership in its VM, so
+# only chown when running on a native Linux host.
+if [ "$(uname)" = "Linux" ]; then
+    sudo chown -R 10001:10001 ~/volumes/rustfs 2>/dev/null \
+        || echo "⚠️  Could not chown ~/volumes/rustfs to 10001 — RustFS may fail to write /data"
+fi
 
 echo "✅ Volumes directory created at ~/volumes"
 echo ""
@@ -74,12 +81,12 @@ echo "=========================================="
 echo ""
 echo "📊 Access your services:"
 echo "  • MLflow UI:      http://localhost:${MLFLOW_PORT}"
-echo "  • MinIO Console:  http://localhost:${MINIO_CONSOLE_PORT}"
+echo "  • Storage Console: http://localhost:${MINIO_CONSOLE_PORT}"
 echo "                    (user: minio, password: minio123)"
 echo ""
 echo "💾 Data is stored in:"
 echo "  ~/volumes/postgres"
-echo "  ~/volumes/minio"
+echo "  ~/volumes/rustfs"
 echo ""
 echo "🧪 Test your setup:"
 echo "  pip install mlflow scikit-learn boto3"

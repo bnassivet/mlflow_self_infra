@@ -19,23 +19,28 @@ services:
       timeout: 5s
       retries: 5
 
-  # MinIO for artifact storage
+  # RustFS for artifact storage (MinIO-compatible S3 engine).
+  # Service key kept as "minio" so depends_on refs and the internal
+  # http://minio:9000 URL stay valid across the rest of the stack.
   minio:
-    image: minio/minio:latest
-    container_name: mlflow-minio
+    image: rustfs/rustfs:latest
+    container_name: mlflow-rustfs
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
-    command: server /data --console-address ":9001"
+      RUSTFS_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
+      RUSTFS_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    command: /data
     volumes:
-      - ~/volumes/minio:/data
+      - ~/volumes/rustfs:/data
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"     # MinIO API
-      - "${MINIO_CONSOLE_PORT:-9001}:9001" # MinIO Console
+      - "${MINIO_API_PORT:-9000}:9000"     # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Console
     networks:
       - mlflow-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -54,7 +59,7 @@ services:
       sleep 5;
       /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minio} ${MINIO_ROOT_PASSWORD:-minio123};
       /usr/bin/mc mb myminio/${MINIO_BUCKET:-mlflow} --ignore-existing;
-      /usr/bin/mc anonymous set download myminio/${MINIO_BUCKET:-mlflow};
+      /usr/bin/mc anonymous set download myminio/${MINIO_BUCKET:-mlflow} || true;
       exit 0;
       "
 
@@ -127,10 +132,12 @@ services:
       --port 5000
       "
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      # python:3.12-slim has no curl; use the bundled Python instead
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health').status==200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 120s
 
 
 networks:
