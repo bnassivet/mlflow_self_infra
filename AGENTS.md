@@ -60,9 +60,6 @@ docker-compose restart mlflow
 # Stop services
 docker-compose down
 
-# Stop and remove all data
-docker-compose down
-rm -rf ~/volumes/postgres ~/volumes/rustfs
 ```
 
 ### Testing the Setup
@@ -185,15 +182,13 @@ AWS credentials configured.
 To change PostgreSQL credentials:
 1. Edit environment variables in docker-compose.yml (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB)
 2. Update DB_URI in mlflow service to match
-3. Remove existing data: `rm -rf ~/volumes/postgres`
-4. Restart: `docker-compose up -d`
+3. Restart: `docker-compose up -d`
 
 To change RustFS credentials (local only):
 1. Edit RUSTFS_ROOT_USER and RUSTFS_ROOT_PASSWORD in docker-compose.yml (or `.env`)
 2. Update AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in mlflow service
 3. Update rustfs-setup entrypoint script with new credentials
-4. Remove existing data: `rm -rf ~/volumes/rustfs`
-5. Restart: `docker-compose up -d`
+4. Restart: `docker-compose up -d`
 
 ## UI Access
 
