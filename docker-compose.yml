@@ -125,7 +125,8 @@ services:
       pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.10.0}' psycopg2-binary boto3 openai anthropic litellm langchain langchain-openai langchain-community dspy -U &&
       mlflow server
       --backend-store-uri postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow123}@postgres:5432/${POSTGRES_DB:-mlflow}
-      --default-artifact-root s3://${RUSTFS_BUCKET:-mlflow}/
+      --artifacts-destination s3://${MINIO_BUCKET:-mlflow}/
+      --serve-artifacts
       --host ${MLFLOW_HOST:-0.0.0.0}
       --port 5000
       "
