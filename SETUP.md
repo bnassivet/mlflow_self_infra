@@ -41,7 +41,7 @@ source .venv/bin/activate
 
 ### 3. Install Dependencies
 
-**Install core dependencies (for local MinIO testing):**
+**Install core dependencies (for local RustFS testing):**
 ```bash
 uv pip install -e .
 ```
@@ -91,7 +91,7 @@ uv pip sync
 ### Core Dependencies (Always Installed)
 
 - **MLflow 3.6.0+** with GenAI features
-- **boto3**: S3/MinIO client
+- **boto3**: S3/RustFS client
 - **scikit-learn**: ML library for test examples
 - **numpy**: Numerical computing
 - **openai, anthropic, litellm**: LLM provider SDKs
@@ -168,12 +168,12 @@ cp .env.example .env
 # Then edit .env with your actual credentials
 ```
 
-**For Local Testing (MinIO):**
+**For Local Testing (RustFS):**
 ```bash
 MLFLOW_TRACKING_URI=http://localhost:5000
 MLFLOW_S3_ENDPOINT_URL=http://localhost:9000
-AWS_ACCESS_KEY_ID=minio
-AWS_SECRET_ACCESS_KEY=minio123
+AWS_ACCESS_KEY_ID=rustfs
+AWS_SECRET_ACCESS_KEY=rustfs123
 ```
 
 **For AWS Testing (with aws optional dependency):**

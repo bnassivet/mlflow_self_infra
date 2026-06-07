@@ -19,42 +19,45 @@ services:
       timeout: 5s
       retries: 5
 
-  # MinIO for artifact storage
-  minio:
-    image: minio/minio:latest
-    container_name: mlflow-minio
+  # RustFS for artifact storage (MinIO-compatible S3 engine)
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: mlflow-rustfs
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
-    command: server /data --console-address ":9001"
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ROOT_USER:-rustfs}
+      RUSTFS_SECRET_KEY: ${RUSTFS_ROOT_PASSWORD:-rustfs123}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    command: /data
     volumes:
-      - ~/volumes/minio:/data
+      - ~/volumes/rustfs:/data
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"     # MinIO API
-      - "${MINIO_CONSOLE_PORT:-9001}:9001" # MinIO Console
+      - "${RUSTFS_API_PORT:-9000}:9000"     # S3 API
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001" # Console
     networks:
       - mlflow-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Create MinIO bucket for MLflow
-  minio-setup:
+  # Create the artifact bucket in RustFS (uses the minio/mc S3 client tool)
+  rustfs-setup:
     image: minio/mc:latest
-    container_name: mlflow-minio-setup
+    container_name: mlflow-rustfs-setup
     depends_on:
-      minio:
+      rustfs:
         condition: service_healthy
     networks:
       - mlflow-network
     entrypoint: >
       /bin/sh -c "
       sleep 5;
-      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minio} ${MINIO_ROOT_PASSWORD:-minio123};
-      /usr/bin/mc mb myminio/${MINIO_BUCKET:-mlflow} --ignore-existing;
-      /usr/bin/mc anonymous set download myminio/${MINIO_BUCKET:-mlflow};
+      /usr/bin/mc alias set rustfs http://rustfs:9000 ${RUSTFS_ROOT_USER:-rustfs} ${RUSTFS_ROOT_PASSWORD:-rustfs123};
+      /usr/bin/mc mb rustfs/${RUSTFS_BUCKET:-mlflow} --ignore-existing;
+      /usr/bin/mc anonymous set download rustfs/${RUSTFS_BUCKET:-mlflow} || true;
       exit 0;
       "
 
@@ -95,17 +98,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
-      minio-setup:
+      rustfs-setup:
         condition: service_completed_successfully
     environment:
       # PostgreSQL connection
       DB_URI: postgresql://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow123}@postgres:5432/${POSTGRES_DB:-mlflow}
-      # MinIO connection
-      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      # RustFS (S3) connection
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://rustfs:9000}
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ROOT_USER:-rustfs}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_ROOT_PASSWORD:-rustfs123}
       # GenAI API keys (loaded from .env file)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -128,10 +131,12 @@ services:
       --port 5000
       "
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      # python:3.12-slim has no curl; use the bundled Python instead
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health').status==200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 120s
 
 
 networks:

@@ -20,12 +20,12 @@ def mlflow_tracking_uri():
 
 
 @pytest.fixture
-def minio_config():
-    """MinIO configuration for local testing"""
+def rustfs_config():
+    """RustFS (S3) configuration for local testing"""
     return {
         "endpoint_url": os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000"),
-        "access_key": os.getenv("AWS_ACCESS_KEY_ID", "minio"),
-        "secret_key": os.getenv("AWS_SECRET_ACCESS_KEY", "minio123"),
+        "access_key": os.getenv("AWS_ACCESS_KEY_ID", "rustfs"),
+        "secret_key": os.getenv("AWS_SECRET_ACCESS_KEY", "rustfs123"),
     }
 
 
