@@ -57,13 +57,20 @@ services:
     #
     # Only safe because the published port is bound to 127.0.0.1 above.
     # MLFLOW_INTERNAL_PORT must differ from MLFLOW_PORT or socat and MLflow collide.
+      # uv replaces pip here: installing this dependency set in isolation measured 302s
+      # with pip vs 178s with uv (including installing uv itself). Boot-to-healthy gains
+      # less than that ratio suggests - roughly 230s -> 209s - because the apt step and
+      # container startup are unaffected. --system is required: uv refuses to install
+      # outside a virtualenv otherwise. Deliberately uncached, so no package storage
+      # outlives docker compose down.
     command: >
       /bin/sh -c "
       set -e;
       export DEBIAN_FRONTEND=noninteractive;
       apt-get update -qq;
       apt-get install -y -qq --no-install-recommends socat;
-      pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.10.0}' openai anthropic litellm langchain langchain-openai langchain-community dspy -U;
+      pip install -q --root-user-action=ignore uv;
+      uv pip install --system '${MLFLOW_VERSION:-mlflow[genai]>=3.10.0}' openai anthropic litellm langchain langchain-openai langchain-community dspy -U;
       socat TCP-LISTEN:${MLFLOW_PORT:-5010},fork,reuseaddr TCP:127.0.0.1:${MLFLOW_INTERNAL_PORT:-5000} &
       exec mlflow server
       --backend-store-uri sqlite:////mlflow/db/mlflow.db
