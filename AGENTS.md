@@ -166,10 +166,38 @@ Consequences for this repo:
 - Two gotchas the script encodes: `api_base` belongs in the secret's `auth_config`, not
   its `secret_value`; and the store caches resolved endpoint configs (`store.secret_cache`),
   so **restart the mlflow service after any gateway change**.
-- All three compose files are wired identically; for the light config pass
-  `-f docker-compose-local-light.yml`. The AI Gateway only needs a database-backed store,
+- `docker-compose.yml` and `docker-compose-local-light.yml` are wired identically
+  (in-container relay + loopback binding); for the light config pass
+  `-f docker-compose-local-light.yml`. `docker-compose-aws.yml` deliberately has NO
+  relay and no loopback binding - it is a remote deployment, where the loopback shim
+  would be a genuine security hole. Switch endpoints there with the script instead.
+- Gateway stores are per-backend: the Postgres and SQLite stacks have separate sets of
+  LLM Connections.
+- LLM Connections created in the UI must use `http://host.docker.internal:<port>/v1`.
+  `localhost` resolves to the container itself, and Ollama needs the `/v1` shim path;
+  both mistakes surface only at chat time as a connection error. The AI Gateway only needs a database-backed store,
   which SQLite satisfies, so it needs no Postgres. Its assistant config persists under
   `~/volumes/mlflow-light/assistant`.
+- MLflow binds loopback-only on `MLFLOW_INTERNAL_PORT`, and a `socat` relay started in the
+  same container forwards `MLFLOW_PORT` to it, so `request.client.host` is `127.0.0.1` and
+  ALL assistant routes work, including the `DENY`-policy ones. It is a raw TCP relay on
+  purpose: an HTTP proxy adding `X-Forwarded-For` would be trusted by uvicorn from
+  127.0.0.1 and would rewrite the client back to the real remote address, re-breaking the
+  check (verified: forging that header turns a 200 into a 403).
+  - This requires the published port to stay bound to `127.0.0.1`. Do not publish on
+    0.0.0.0 while the relay runs — that grants arbitrary code execution to the network.
+  - The relay is in-container rather than a sidecar because a sidecar using
+    `network_mode: "service:mlflow"` is stranded in the old network namespace on every
+    `restart mlflow` — MLflow reports healthy while the published port is dead, and
+    compose restarts a named sidecar *before* mlflow, so no single command fixes it.
+    `docker compose restart mlflow` is safe with the relay in-container.
+  - socat is `apt-get install`ed at container start, which adds a few seconds to boot.
+- The assistant's model dropdown lists gateway *endpoint names* (`list_models()` in
+  `mlflow_gateway.py` returns every endpoint), so multiple Ollama/LM Studio endpoints can
+  coexist and be switched at runtime. Create them with `setup_assistant.py --name <name>`.
+- `MLFLOW_CRYPTO_KEK_PASSPHRASE` must be set BEFORE any LLM Connection exists. Changing it
+  makes existing gateway secrets undecryptable and every API key must be re-entered; it is
+  intentionally left unset (commented) in `.env` because connections already exist.
 - An OpenAI-compatible local server (Ollama, LM Studio, vLLM) is registered as
   `provider="openai"` with an `api_base` override — there is no dedicated Ollama gateway
   provider.

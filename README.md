@@ -107,18 +107,63 @@ docker compose exec mlflow python /scripts/setup_assistant.py \
 docker compose restart mlflow
 ```
 
-The light config works the same way — add `-f docker-compose-local-light.yml` to both
-commands. Everything above applies to it unchanged; the AI Gateway stores its endpoint in
-whichever backend store is configured, and SQLite is database-backed, so no Postgres is
-needed.
+#### Selecting endpoints in the UI (Ollama *and* LM Studio)
+
+`docker-compose.yml` runs MLflow bound to loopback inside the container and puts a
+`socat` relay in front of it, in the same container, forwarding the published port to
+that listener. The server then sees a real `127.0.0.1` peer, so **the whole assistant UI
+works** — including the endpoint dropdown and the settings Save button. Every AI Gateway
+endpoint you create under **LLM Connections** shows up in that dropdown, so Ollama and
+LM Studio endpoints can be switched between freely at runtime.
+
+This is only safe because the published port is bound to `127.0.0.1`. The two together
+restore MLflow's intended "same host only" guarantee rather than bypassing it. **If you
+need to reach this server from another machine, drop the relay and bind `--host
+0.0.0.0`** — otherwise anyone who can route to the port gets arbitrary code execution in
+the container.
+
+The relay lives in the mlflow container rather than in a sidecar precisely so that
+`docker compose restart mlflow` is safe: a sidecar sharing the container's network
+namespace is stranded by a restart, leaving MLflow reporting healthy while the published
+port answers nothing.
+
+Endpoints are created with the same script; use `--name` to add several:
+
+```bash
+docker compose exec mlflow python /scripts/setup_assistant.py \
+  --name ollama-qwen3-14b --base-url http://host.docker.internal:11434/v1 --model qwen3:14b
+
+docker compose exec mlflow python /scripts/setup_assistant.py \
+  --name lmstudio-gpt-oss --base-url http://host.docker.internal:1234/v1 --model openai/gpt-oss-20b
+
+docker compose restart mlflow
+```
+
+Pick tool-calling models — the assistant is a tool-calling agent and a chat-only model
+will not work.
+
+The light config is wired identically — relay, loopback binding and all. Add
+`-f docker-compose-local-light.yml` to each command.
+
+The AI Gateway only needs a database-backed store, and SQLite satisfies that, so no
+Postgres is involved. Note that the two stacks keep **separate** gateway stores: an LLM
+Connection created against one does not exist in the other.
+
+When creating an LLM Connection through the UI, the base URL must be
+`http://host.docker.internal:<port>` — **not** `localhost`, which inside the container
+refers to the container itself — and it needs the `/v1` suffix for Ollama's
+OpenAI-compatible shim (`http://host.docker.internal:11434/v1`).
 
 Pick a model that supports tool calling — the assistant needs it. The script is
 idempotent, so re-run it to switch models or base URLs.
 
-Set `MLFLOW_CRYPTO_KEK_PASSPHRASE` in `.env` before creating any LLM Connection: it
-encrypts gateway secrets at rest in Postgres, and MLflow falls back to a well-known
-default passphrase when it is unset. Changing it later invalidates existing secrets —
-re-run the script above to re-encrypt them.
+`MLFLOW_CRYPTO_KEK_PASSPHRASE` encrypts gateway secrets at rest; MLflow falls back to a
+well-known default passphrase when unset. **Set it before creating any LLM Connection.**
+It is left commented out in `.env.example` on purpose: changing it later makes every
+existing secret undecryptable (`Failed to decrypt secret...`) and each API key has to be
+re-entered — there is no re-encryption path for keys you no longer have. With the
+loopback binding above the default passphrase is an acceptable local-dev tradeoff; set a
+real one on any server reachable over a network.
 
 ### MLflow Version
 
