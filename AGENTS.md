@@ -137,6 +137,43 @@ Both setups run MLflow with:
 - Host: 0.0.0.0:5000
 - Python dependencies installed at runtime: mlflow, psycopg2-binary, boto3
 
+### MLflow Assistant (Beta)
+
+The assistant API (`/ajax-api/3.0/mlflow/assistant/*`) is gated per route in
+`mlflow/server/assistant/api.py`. `_is_localhost()` checks `request.client.host` for a
+loopback IP; under Docker that is the bridge gateway, never `127.0.0.1`, so every gated
+route 403s with "You do not have permission to access this resource".
+
+Route policies:
+- `DENY` — `PUT /config`, `POST /skills/install`. Always blocked remotely. **Config
+  changes must be made server-side**, not through the settings panel's Save button.
+- `ONLY_SAFE_PROVIDER` — chat, sessions, models. Allowed only when
+  `MLFLOW_ENABLE_REMOTE_ASSISTANT=true` **and** the provider declares
+  `allows_remote_access`. Ollama / OpenAI-compatible providers return `False`
+  unconditionally; `mlflow_gateway` returns `True`; `claude_code`/`codex` only under
+  `MLFLOW_ENABLE_ASSISTANT_SANDBOX`.
+- `NONE` — `GET /config`, `GET /providers`.
+
+Consequences for this repo:
+- `MLFLOW_PORT` is the host **and** container port. The assistant derives its gateway
+  self-call URL from the browser's `Host` header (`get_server_base_url` in
+  `mlflow/server/asgi_utils.py`), so mismatched ports make the server dial a closed port.
+- Assistant config lives at `$HOME/.mlflow/assistant/config.json` in the container and is
+  persisted via the `~/volumes/mlflow-assistant` mount.
+- `scripts/setup_assistant.py` (mounted at `/scripts`) creates the gateway secret, model
+  definition and endpoint, then selects the `mlflow_gateway` provider. Run it with
+  `docker compose exec mlflow python /scripts/setup_assistant.py --model <model>`.
+- Two gotchas the script encodes: `api_base` belongs in the secret's `auth_config`, not
+  its `secret_value`; and the store caches resolved endpoint configs (`store.secret_cache`),
+  so **restart the mlflow service after any gateway change**.
+- All three compose files are wired identically; for the light config pass
+  `-f docker-compose-local-light.yml`. The AI Gateway only needs a database-backed store,
+  which SQLite satisfies, so it needs no Postgres. Its assistant config persists under
+  `~/volumes/mlflow-light/assistant`.
+- An OpenAI-compatible local server (Ollama, LM Studio, vLLM) is registered as
+  `provider="openai"` with an `api_base` override — there is no dedicated Ollama gateway
+  provider.
+
 ## Configuration Files
 
 ### docker-compose.yml
