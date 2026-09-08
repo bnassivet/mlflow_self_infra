@@ -60,6 +60,7 @@ services:
     command: >
       /bin/sh -c "
       set -e;
+      export DEBIAN_FRONTEND=noninteractive;
       apt-get update -qq;
       apt-get install -y -qq --no-install-recommends socat;
       pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.10.0}' openai anthropic litellm langchain langchain-openai langchain-community dspy -U;
