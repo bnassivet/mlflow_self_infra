@@ -35,23 +35,45 @@ services:
       # Server-side assistant setup helper (see scripts/setup_assistant.py)
       - ./scripts:/scripts:ro
     ports:
-      # Published and internal ports are kept identical on purpose. The assistant builds
-      # its self-call URL to the in-server AI Gateway from the browser's Host header
-      # (get_server_base_url in mlflow/server/asgi_utils.py), so a host port that differs
-      # from the container's listen port makes the server dial a port it isn't bound to.
-      - "${MLFLOW_PORT:-5010}:${MLFLOW_PORT:-5010}"
+      # Bound to 127.0.0.1 deliberately: the in-container socat relay (see command below)
+      # makes every request look like it comes from loopback, which unlocks the
+      # assistant's privileged routes (PUT /config, skills install). Those are
+      # remote-code-execution surfaces, so the port must not be reachable from the
+      # network. Publishing this on 0.0.0.0 while the relay runs would hand full
+      # assistant access to anyone who can route here.
+      #
+      # Published and internal ports are also kept identical on purpose: the assistant
+      # builds its self-call URL to the in-server AI Gateway from the browser's Host
+      # header (get_server_base_url in mlflow/server/asgi_utils.py), so a host port that
+      # differs from the listening port makes the server dial a port nothing is bound to.
+      - "127.0.0.1:${MLFLOW_PORT:-5010}:${MLFLOW_PORT:-5010}"
+    # Loopback relay for the MLflow Assistant - see docker-compose.yml for the full
+    # rationale. In short: the assistant's privileged routes require a 127.0.0.1 peer,
+    # Docker's port proxy rewrites the source address, so MLflow binds loopback-only and
+    # socat relays the published port to it. It runs in this container rather than a
+    # sidecar because a sidecar sharing the network namespace is stranded on every
+    # mlflow restart. Raw TCP, not HTTP: no X-Forwarded-For, which uvicorn would trust
+    # from 127.0.0.1 and use to rewrite the client back to the real remote address.
+    #
+    # Only safe because the published port is bound to 127.0.0.1 above.
+    # MLFLOW_INTERNAL_PORT must differ from MLFLOW_PORT or socat and MLflow collide.
     command: >
       /bin/sh -c "
-      pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.10.0}' openai anthropic litellm langchain langchain-openai langchain-community dspy -U &&
-      mlflow server
+      set -e;
+      apt-get update -qq;
+      apt-get install -y -qq --no-install-recommends socat;
+      pip install '${MLFLOW_VERSION:-mlflow[genai]>=3.10.0}' openai anthropic litellm langchain langchain-openai langchain-community dspy -U;
+      socat TCP-LISTEN:${MLFLOW_PORT:-5010},fork,reuseaddr TCP:127.0.0.1:${MLFLOW_INTERNAL_PORT:-5000} &
+      exec mlflow server
       --backend-store-uri sqlite:////mlflow/db/mlflow.db
       --default-artifact-root /mlflow/artifacts
-      --host 0.0.0.0
-      --port ${MLFLOW_PORT:-5010}
+      --host 127.0.0.1
+      --port ${MLFLOW_INTERNAL_PORT:-5000}
       "
     healthcheck:
-      # python:3.12-slim has no curl; use the bundled Python instead
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:${MLFLOW_PORT:-5010}/health').status==200 else 1)"]
+      # python:3.12-slim has no curl; use the bundled Python instead. Probes through the
+      # socat relay, not MLflow's listener directly, so a dead relay shows as unhealthy.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:${MLFLOW_PORT:-5010}/health').status==200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
