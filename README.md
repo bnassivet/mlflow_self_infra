@@ -72,6 +72,54 @@ All configurable values live in `.env`. Copy `.env.example` as a starting point.
 | `ANTHROPIC_API_KEY` | _(empty)_ | Anthropic API key for GenAI evaluation |
 | `OPENAI_API_BASE` | `http://host.docker.internal:1234/v1` | OpenAI-compatible API endpoint — override to point at a local LLM (e.g. LM Studio, vLLM) |
 
+### MLflow Assistant (Beta)
+
+The in-UI assistant is **localhost-only by design** — it can run the MLflow CLI and edit
+project code, so MLflow refuses to expose it to anything but the machine running the
+server. Behind Docker the browser is never seen as localhost (Docker's port proxy rewrites
+the source address to the bridge gateway), so out of the box every assistant call fails
+with:
+
+> Error: You do not have permission to access this resource.
+
+Two things make it work here, both already wired into `docker-compose.yml`:
+
+1. `MLFLOW_ENABLE_REMOTE_ASSISTANT=true` lifts the localhost restriction — but **only for
+   providers that declare `allows_remote_access`**. Ollama and plain OpenAI-compatible
+   providers stay blocked no matter what; the practical choice is **MLflow AI Gateway**,
+   which is safe remotely because the LLM call is proxied server-side.
+2. `MLFLOW_PORT` is used as both the host and container port. The assistant builds its
+   self-call URL to the in-server gateway from the browser's `Host` header, so a host port
+   that differs from the container's listen port makes the server dial a port it isn't
+   bound to.
+
+`PUT /config` and `POST /skills/install` keep a hard DENY policy and stay blocked from a
+browser regardless — so **the Save button in the assistant settings panel will not work**,
+and provider selection has to happen server-side. Use the helper script:
+
+```bash
+# Point the assistant at a local Ollama model (the container mounts ./scripts at /scripts)
+docker compose exec mlflow python /scripts/setup_assistant.py \
+  --base-url http://host.docker.internal:11434/v1 \
+  --model qwen3:14b
+
+# The gateway caches resolved endpoint configs, so restart after any change
+docker compose restart mlflow
+```
+
+The light config works the same way — add `-f docker-compose-local-light.yml` to both
+commands. Everything above applies to it unchanged; the AI Gateway stores its endpoint in
+whichever backend store is configured, and SQLite is database-backed, so no Postgres is
+needed.
+
+Pick a model that supports tool calling — the assistant needs it. The script is
+idempotent, so re-run it to switch models or base URLs.
+
+Set `MLFLOW_CRYPTO_KEK_PASSPHRASE` in `.env` before creating any LLM Connection: it
+encrypts gateway secrets at rest in Postgres, and MLflow falls back to a well-known
+default passphrase when it is unset. Changing it later invalidates existing secrets —
+re-run the script above to re-encrypt them.
+
 ### MLflow Version
 
 Set `MLFLOW_VERSION` in `.env` to pin or upgrade MLflow:
