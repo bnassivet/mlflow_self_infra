@@ -6,6 +6,12 @@ services:
     image: python:3.12-slim
     container_name: mlflow-server-light
     environment:
+      # Shared uv download cache (named volume, see the volumes section at the bottom).
+      UV_CACHE_DIR: /uv-cache
+      # A named volume is necessarily a different filesystem from site-packages, so uv
+      # cannot hardlink out of the cache. Say so explicitly instead of letting it try,
+      # fail, and warn on every boot. Costs little: installs run ~1s from a warm cache.
+      UV_LINK_MODE: copy
       # GenAI API keys (loaded from .env file)
       OPENAI_API_BASE: ${OPENAI_API_BASE:-http://host.docker.internal:11434/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -34,6 +40,8 @@ services:
       - ~/volumes/mlflow-light/assistant:/root/.mlflow/assistant
       # Server-side assistant setup helper (see scripts/setup_assistant.py)
       - ./scripts:/scripts:ro
+      # uv download cache; pruned after each install
+      - uv-cache:/uv-cache
     ports:
       # Bound to 127.0.0.1 deliberately: the in-container socat relay (see command below)
       # makes every request look like it comes from loopback, which unlocks the
@@ -57,12 +65,13 @@ services:
     #
     # Only safe because the published port is bound to 127.0.0.1 above.
     # MLFLOW_INTERNAL_PORT must differ from MLFLOW_PORT or socat and MLflow collide.
-      # uv replaces pip here: installing this dependency set in isolation measured 302s
-      # with pip vs 178s with uv (including installing uv itself). Boot-to-healthy gains
-      # less than that ratio suggests - roughly 230s -> 209s - because the apt step and
-      # container startup are unaffected. --system is required: uv refuses to install
-      # outside a virtualenv otherwise. Deliberately uncached, so no package storage
-      # outlives docker compose down.
+      # uv replaces pip here. Boot-to-healthy, measured on this stack: ~230s with pip,
+      # ~209s with uv and no cache, ~20s with uv and the warm cache volume below - the
+      # cache is where nearly all of the win is. From a warm cache uv reports resolve
+      # 324ms / prepare 22ms / install 556ms for 153 packages; the rest of the 20s is
+      # apt, container start and MLflow's own boot. --system is required: uv refuses to
+      # install outside a virtualenv otherwise. `uv cache prune` afterwards drops entries
+      # superseded by -U so the volume does not grow without bound.
     command: >
       /bin/sh -c "
       set -e;
@@ -71,6 +80,7 @@ services:
       apt-get install -y -qq --no-install-recommends socat;
       pip install -q --root-user-action=ignore uv;
       uv pip install --system '${MLFLOW_VERSION:-mlflow[genai]>=3.10.0}' openai anthropic litellm langchain langchain-openai langchain-community dspy -U;
+      uv cache prune;
       socat TCP-LISTEN:${MLFLOW_PORT:-5010},fork,reuseaddr TCP:127.0.0.1:${MLFLOW_INTERNAL_PORT:-5000} &
       exec mlflow server
       --backend-store-uri sqlite:////mlflow/db/mlflow.db
@@ -86,3 +96,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+
+volumes:
+  # uv download cache. A named volume rather than a ~/volumes bind mount so
+  # `docker compose down -v` reclaims it; `uv cache prune` after each install keeps it
+  # from growing as -U supersedes package versions.
+  uv-cache:
